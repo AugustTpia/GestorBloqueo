@@ -1,33 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="30dp">
+    android:keepScreenOn="true">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <ImageView
+        android:id="@+id/ivBackgroundLock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/img_bloqueo_prestamitos" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="⚠️"
-        android:textSize="80sp" />
+        android:layout_gravity="bottom"
+        android:background="#AA000000"
+        android:orientation="vertical"
+        android:padding="25dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="DISPOSITIVO BLOQUEADO"
-        android:textColor="#FF0000"
-        android:textSize="26sp"
-        android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DISPOSITIVO RESTRINGIDO"
+            android:textAlignment="center"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="Este equipo ha sido restringido por falta de pago. Para recuperar el acceso, realice su pago y contacte a soporte."
-        android:textAlignment="center"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Realice su pago para recuperar el acceso. Contacte a soporte."
+            android:textAlignment="center"
+            android:textColor="#E2E8F0"
+            android:textSize="16sp" />
 
-</LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>
