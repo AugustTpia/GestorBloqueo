@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "822197994701",
+    "project_id": "gestorandroid-32d3d",
+    "storage_bucket": "gestorandroid-32d3d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:822197994701:android:54e30fc729f3ae2c50d584",
+        "android_client_info": {
+          "package_name": "com.atdev.gestor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgZfvwG5o2F17oLE4AelSkgk8W72YHxHk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
