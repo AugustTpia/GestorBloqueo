@@ -26,48 +26,48 @@ class LockActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        // Hacer que la actividad sea persistente sobre cualquier cosa
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Esto es vital para Android 10+ para que la app no sea minimizada
+        setFinishOnTouchOutside(false)
 
         setContentView(R.layout.activity_lock)
+    }
 
-        // REGISTRO SEGURO (SOLUCIÓN AL ERROR)
-        val filter = IntentFilter("CERRAR_PANTALLA_BLOQUEO")
-        // Usamos la bandera EXPORTED para que el servicio de Firebase pueda avisarle a esta pantalla
-        ContextCompat.registerReceiver(this, cerrarReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+    // Evita que usen el botón de "Recientes" para cerrar la app
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus && !permitirCerrar) {
+            // Si pierde el foco (porque abrieron notificaciones o ajustes),
+            // forzamos el regreso inmediato.
+            val intent = Intent(this, LockActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+        }
+    }
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {}
-        })
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        window.addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
     }
 
     override fun onPause() {
         super.onPause()
-        // 1. Si ya tenemos permiso de cerrar, no hacemos nada
         if (permitirCerrar) return
 
+        // Un delay muy corto para que no dé tiempo de reaccionar
         Handler(Looper.getMainLooper()).postDelayed({
-            // 2. Usar el contexto protegido para checar el disco REAL
-            val safeContext = applicationContext.createDeviceProtectedStorageContext()
-            val stillLocked = safeContext.getSharedPreferences("CONFIG", Context.MODE_PRIVATE)
-                .getBoolean("dispositivo_bloqueado", true) // Por seguridad, default true
-
-            // 3. Si en el disco ya dice 'false', forzamos el cierre aquí mismo
-            if (!stillLocked) {
-                permitirCerrar = true
-                finish()
-                return@postDelayed
-            }
-
-            // 4. Si sigue bloqueado, relanzamos
             if (!permitirCerrar) {
-                val intent = Intent(this, LockActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                val intent = Intent(this, LockActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
                 startActivity(intent)
+                overridePendingTransition(0, 0)
             }
-        }, 1000) // Aumentamos a 1000ms para dar estabilidad en el arranque
+        }, 100)
     }
 
     override fun onDestroy() {

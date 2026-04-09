@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">ATLink</string>
     <string name="msg_bloqueo">Dispositivo vinculado a ATLink. Acceso restringido por falta de pago o incumplimiento de contrato.</string>
+    <string name="accessibility_description">Protección de seguridad activa para Padlock Prestamitos. Evita la desinstalación no autorizada del sistema de gestión.</string>
 </resources>

