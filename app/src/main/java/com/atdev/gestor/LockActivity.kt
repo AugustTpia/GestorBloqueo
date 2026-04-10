@@ -1,16 +1,13 @@
 package com.atdev.gestor
 
-import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.*
 import android.view.WindowManager
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.firebase.messaging.FirebaseMessaging
 
 class LockActivity : AppCompatActivity() {
 
@@ -18,29 +15,57 @@ class LockActivity : AppCompatActivity() {
 
     private val cerrarReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            permitirCerrar = true // <--- Esto detiene el Handler del onPause
-            finish() // <--- Esto cierra la pantalla
+            if (intent?.action == "CERRAR_PANTALLA_BLOQUEO") {
+                permitirCerrar = true
+                finish()
+            }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Hacer que la actividad sea persistente sobre cualquier cosa
+        // 1. REGISTRAR EL RECEPTOR (Esto te faltaba)
+        // 1. Definir el filtro
+        val filter = IntentFilter("CERRAR_PANTALLA_BLOQUEO")
+
+// 2. Usar ContextCompat para registrar el receptor
+// Esto elimina el error de Android 14 y funciona en versiones viejas también
+        ContextCompat.registerReceiver(
+            this,
+            cerrarReceiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED // <--- Aquí le decimos al sistema que Firebase puede hablar con la Actividad
+        )
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        // Esto es vital para Android 10+ para que la app no sea minimizada
         setFinishOnTouchOutside(false)
-
         setContentView(R.layout.activity_lock)
+
+        // Verificación inicial por si ya se desbloqueó mientras la actividad nacía
+        verificarEstadoBloqueo()
     }
 
-    // Evita que usen el botón de "Recientes" para cerrar la app
+    override fun onResume() {
+        super.onResume()
+        verificarEstadoBloqueo()
+    }
+
+    // 2. CONSULTA DIRECTA AL ALMACENAMIENTO PROTEGIDO
+    private fun verificarEstadoBloqueo() {
+        val safeContext = applicationContext.createDeviceProtectedStorageContext()
+        val estaBloqueado = safeContext.getSharedPreferences("CONFIG", Context.MODE_PRIVATE)
+            .getBoolean("dispositivo_bloqueado", false)
+
+        if (!estaBloqueado) {
+            permitirCerrar = true
+            finish()
+        }
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus && !permitirCerrar) {
-            // Si pierde el foco (porque abrieron notificaciones o ajustes),
-            // forzamos el regreso inmediato.
             val intent = Intent(this, LockActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -58,8 +83,10 @@ class LockActivity : AppCompatActivity() {
         super.onPause()
         if (permitirCerrar) return
 
-        // Un delay muy corto para que no dé tiempo de reaccionar
         Handler(Looper.getMainLooper()).postDelayed({
+            // 3. ANTES DE REINICIAR EL BUCLE, CHECAMOS DISCO
+            verificarEstadoBloqueo()
+
             if (!permitirCerrar) {
                 val intent = Intent(this, LockActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -71,9 +98,9 @@ class LockActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         try {
             unregisterReceiver(cerrarReceiver)
         } catch (e: Exception) {}
+        super.onDestroy()
     }
 }

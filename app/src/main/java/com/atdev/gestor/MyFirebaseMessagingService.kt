@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import androidx.core.content.edit
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -32,11 +33,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             // En tu MyFirebaseMessagingService
             "UNLOCK_DEVICE" -> {
                 val safeContext = applicationContext.createDeviceProtectedStorageContext()
-                safeContext.getSharedPreferences("CONFIG", Context.MODE_PRIVATE)
-                    .edit().putBoolean("dispositivo_bloqueado", false).commit() // COMMIT es clave aquí
+                safeContext.getSharedPreferences("CONFIG", Context.MODE_PRIVATE).edit().apply {
+                    putBoolean("dispositivo_bloqueado", false)
+                    commit() // Usamos commit para que el cambio sea físico e inmediato
+                }
 
-                val intent = Intent("CERRAR_PANTALLA_BLOQUEO")
-                intent.setPackage(packageName)
+                // Enviamos el broadcast con un flag de prioridad
+                val intent = Intent("CERRAR_PANTALLA_BLOQUEO").apply {
+                    setPackage(packageName) // <--- Esto asegura que solo TU app reciba la orden
+                }
                 sendBroadcast(intent)
             }
         }
