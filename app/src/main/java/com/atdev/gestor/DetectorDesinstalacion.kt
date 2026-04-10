@@ -40,22 +40,33 @@ class DetectorDesinstalacion : AccessibilityService() {
         if (node == null) return false
 
         val texto = node.text?.toString() ?: ""
-        val paquete = node.packageName?.toString() ?: ""
+        val descripcion = node.contentDescription?.toString() ?: ""
 
-        // ¿Estamos en Ajustes y el nodo dice nuestro nombre?
-        if (paquete.contains("settings") && texto.contains("ATLink", ignoreCase = true)) {
-            // Si además el sistema muestra botones típicos de gestión...
-            val root = rootInActiveWindow
-            val esVentanaPeligrosa = root?.findAccessibilityNodeInfosByText("Desinstalar")?.isNotEmpty() == true ||
-                    root?.findAccessibilityNodeInfosByText("Uninstall")?.isNotEmpty() == true ||
-                    root?.findAccessibilityNodeInfosByText("Forzar detención")?.isNotEmpty() == true
+        // 1. Buscamos tu nombre de app en cualquier campo de texto o descripción
+        // IMPORTANTE: Asegúrate de que "ATLink" sea el nombre que sale en Ajustes > Aplicaciones
+        val nombreAppDetectado = texto.contains("ATLink", ignoreCase = true) ||
+                descripcion.contains("ATLink", ignoreCase = true)
 
-            if (esVentanaPeligrosa) return true
+        if (nombreAppDetectado) {
+            // 2. Si detectamos el nombre, verificamos si la ventana es de Ajustes o Google Play
+            // Agregamos "packageinstaller" que es donde Android gestiona la eliminación
+            val paquete = node.packageName?.toString() ?: ""
+            val esZonaPeligrosa = paquete.contains("settings") ||
+                    paquete.contains("packageinstaller") ||
+                    paquete.contains("vending") // Google Play Store
+
+            if (esZonaPeligrosa) {
+                Log.d("ACCESSIBILITY", "¡Intento de desinstalación detectado para ATLink!")
+                return true
+            }
         }
 
+        // 3. Seguimos buscando en los hijos del nodo
         for (i in 0 until node.childCount) {
-            if (analizarPantallaRecursivo(node.getChild(i))) return true
+            val child = node.getChild(i)
+            if (analizarPantallaRecursivo(child)) return true
         }
+
         return false
     }
 

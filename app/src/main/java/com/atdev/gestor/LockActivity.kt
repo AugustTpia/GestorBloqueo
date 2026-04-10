@@ -1,10 +1,13 @@
 package com.atdev.gestor
 
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.*
+import android.util.Log
+import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -17,6 +20,9 @@ class LockActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "CERRAR_PANTALLA_BLOQUEO") {
                 permitirCerrar = true
+                try {
+                    stopLockTask() // MUY IMPORTANTE: Liberar el anclaje antes de cerrar
+                } catch (e: Exception) {}
                 finish()
             }
         }
@@ -25,33 +31,49 @@ class LockActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. REGISTRAR EL RECEPTOR (Esto te faltaba)
-        // 1. Definir el filtro
+        // Registrar el receiver con el método seguro de ContextCompat
         val filter = IntentFilter("CERRAR_PANTALLA_BLOQUEO")
+        ContextCompat.registerReceiver(this, cerrarReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
-// 2. Usar ContextCompat para registrar el receptor
-// Esto elimina el error de Android 14 y funciona en versiones viejas también
-        ContextCompat.registerReceiver(
-            this,
-            cerrarReceiver,
-            filter,
-            ContextCompat.RECEIVER_EXPORTED // <--- Aquí le decimos al sistema que Firebase puede hablar con la Actividad
+        // Bloqueo de interacción con el sistema
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         )
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setFinishOnTouchOutside(false)
-        setContentView(R.layout.activity_lock)
+        // Ocultar barras (Método compatible)
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_FULLSCREEN
+                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
 
-        // Verificación inicial por si ya se desbloqueó mientras la actividad nacía
-        verificarEstadoBloqueo()
+        setContentView(R.layout.activity_lock)
     }
 
     override fun onResume() {
         super.onResume()
+
+        // Forzamos el anclaje de pantalla (Screen Pinning)
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
+                    startLockTask()
+                }
+            } else {
+                startLockTask()
+            }
+        } catch (e: Exception) {
+            Log.e("LOCK", "Error al anclar pantalla: ${e.message}")
+        }
+
         verificarEstadoBloqueo()
     }
 
-    // 2. CONSULTA DIRECTA AL ALMACENAMIENTO PROTEGIDO
     private fun verificarEstadoBloqueo() {
         val safeContext = applicationContext.createDeviceProtectedStorageContext()
         val estaBloqueado = safeContext.getSharedPreferences("CONFIG", Context.MODE_PRIVATE)
@@ -59,6 +81,7 @@ class LockActivity : AppCompatActivity() {
 
         if (!estaBloqueado) {
             permitirCerrar = true
+            try { stopLockTask() } catch (e: Exception) {}
             finish()
         }
     }
@@ -84,17 +107,15 @@ class LockActivity : AppCompatActivity() {
         if (permitirCerrar) return
 
         Handler(Looper.getMainLooper()).postDelayed({
-            // 3. ANTES DE REINICIAR EL BUCLE, CHECAMOS DISCO
-            verificarEstadoBloqueo()
-
             if (!permitirCerrar) {
                 val intent = Intent(this, LockActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
                 startActivity(intent)
-                overridePendingTransition(0, 0)
             }
-        }, 100)
+        }, 10)
     }
 
     override fun onDestroy() {
